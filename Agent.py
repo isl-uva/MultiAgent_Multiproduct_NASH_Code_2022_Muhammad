@@ -33,10 +33,12 @@ class agent:
         self.actions= self.mtp.get_alist()
         # self.states= Multiproduct.get_state()
         self.actual_states = self.get_allStates()
+        self.gamma=0.9
 
     def get_validActions(self):
         for i in self.actual_states:
             self.valid_actions[i]=[self.actions]
+        # print("The valid actions are: ", self.valid_actions)
         return self.valid_actions
 
     def get_allStates(self):  # only machine status and part type with machine are used as the states here. Make change in the prod. code
@@ -91,6 +93,7 @@ class agent:
         # choose action randomly
         # self.locationIndex = currentState[self.agentIndex]
         self.currentAction = random.choice(self.actions)
+        # print('The current action is: ', self.currentAction)
         return self.currentAction
 
     def constructPayoffTable(self, state):
@@ -99,10 +102,10 @@ class agent:
         # the content of Payoff Table is the Q value
         # actions0 = self.actions[state[0]]
         # actions1 = self.actions[state[1]]
-        # print("payoff state: ", state)
+        # print("The constrctPayoffTable state is: ", type(state))
         m0 = matrix.Matrix(len(self.actions), len(self.actions))
         m1 = matrix.Matrix(len(self.actions), len(self.actions))
-        # print("m0 and m1: ", m0, m1)
+        # print("m0 and m1: ", type(m0), type(m1))
         for i in range(len(self.actions)):
             for j in range(len(self.actions)):
                 # print("i and j: ", self.actions[i],self.actions[j])
@@ -111,16 +114,21 @@ class agent:
         return m0, m1
 
     def nashQLearning(self, gamma, agent0Action, agent0Reward, currentState, nextState, agent1Action, agent1Reward):
+        # print(f'The agent0action in nashQlearning is {agent0Action}, agent0reward is {agent0Reward}, currentstate is {currentState},\
+        #  nextstate is {nextState} agent1action is {agent1Action} and agent1reward {agent1Reward}')
         self.gamma = gamma  # gamma is actually alpha of the equation
-        self.currentState = currentState
-        self.nextState = nextState
+        # self.currentState = currentState
+        # self.nextState = nextState
         self.timeNumber[self.currentState][(agent0Action, agent1Action)] += 1
         self.alpha[self.currentState][(agent0Action, agent1Action)] = 1.0 / self.timeNumber[self.currentState][(agent0Action, agent1Action)]
         # m0 and m1 are payoff tables of agent0 and agent1
-        (m0, m1) = self.constructPayoffTable(nextState)
+        (m0, m1) = self.constructPayoffTable(self.nextState)
         probprob = lemkeHowson.lemkeHowson(m0, m1)
+        # print('The probprob is: ', probprob)
         prob0 = np.array(probprob[0])
+        # print('The prob0 is: ', prob0)
         prob1 = np.array(probprob[1])
+        # print('The prob1 is: ', prob1)
         prob0 = np.matrix(prob0)
         prob1 = np.matrix(prob1).reshape((-1, 1))
         # calculate the nash values
@@ -139,104 +147,150 @@ class agent:
         nash0 = m_nash0[0, 0].nom() / m_nash0[0, 0].denom()
         nash1 = m_nash1[0, 0].nom() / m_nash1[0, 0].denom()
         nashQValues = [nash0, nash1]
-        self.qTable[0][self.currentState][(agent0Action, agent1Action)] \
-            = (1 - self.alpha[self.currentState][(agent0Action, agent1Action)]) \
-              * self.qTable[0][self.currentState][(agent0Action, agent1Action)] \
-              + self.alpha[self.currentState][(agent0Action, agent1Action)] \
-              * (agent0Reward + self.gamma * nashQValues[0])
-        print(self.qTable[0][self.currentState][(agent0Action, agent1Action)])
-        self.qTable[1][self.currentState][(agent0Action, agent1Action)] \
-            = (1 - self.alpha[self.currentState][(agent0Action, agent1Action)]) \
-              * self.qTable[1][self.currentState][(agent0Action, agent1Action)] \
-              + self.alpha[self.currentState][(agent0Action, agent1Action)] \
-              * (agent1Reward + self.gamma * nashQValues[1])
-        print(self.qTable[1][self.currentState][(agent0Action, agent1Action)])
-        self.timeStep += 1
+        # print('the nashQvalues are: ', nashQValues)
+        action_tuple= (agent0Action, agent1Action)
+        alpha_var = self.alpha[self.currentState][action_tuple]
+        self.qTable[0][self.currentState][action_tuple]= (1 - alpha_var)* self.qTable[0][self.currentState][action_tuple] + alpha_var * (agent0Reward + self.gamma * nashQValues[0])
+        # print('self.qTable[0][self.currentState][(agent0Action, agent1Action)]', self.qTable[0][self.currentState][(agent0Action, agent1Action)])
+        self.qTable[1][self.currentState][action_tuple] = (1 - alpha_var) * self.qTable[1][self.currentState][action_tuple]+ alpha_var * (agent1Reward + self.gamma * nashQValues[1])
+        # print('self.qTable[1][self.currentState][(agent0Action, agent1Action)]',self.qTable[1][self.currentState][(agent0Action, agent1Action)])
+        # self.timeStep += 1
+        # print('the timestep is: ', self.timeStep)
 
     def chooseActionBasedOnQTable(self, currentState):
-        print('currentState',currentState)
+        # print('the currentStatein chooseActioncased on Qtable is: ',currentState)
         (m0, m1) = self.constructPayoffTable(currentState)
         probprob = lemkeHowson.lemkeHowson(m0, m1)
-        print("probprob: ",probprob)
+        # print("probprob: ",probprob)
         prob0 = np.array(probprob[0])
         re0 = np.where(prob0 == np.max(prob0))[0][0]
         prob1 = np.array(probprob[1])
         re1 = np.where(prob1 == np.max(prob1))[0][0]
         re = [re0, re1]
-        print(re)
+        print('the re in chooseactionbasedonQtable is: ',re)
         actions_valid= self.get_validActions()
-        actionsAvailable = actions_valid[currentState[self.agentIndex]]
-        print(actionsAvailable)
-        return actionsAvailable[re[self.agentIndex]]
+        # print('the actions_valid are: ', actions_valid)
+        actionsAvailable = actions_valid[currentState]
+        # for i in actionsAvailable:
+        #     aAvailable= tuple(i)
+        print('the actionsavailable from chooseactionbasedonQtable are:',actionsAvailable)
+        print('actionsAvailable[re[self.agentIndex]]', actionsAvailable[re[self.agentIndex]][self.agentIndex])
+        # c= None
+        # for c in re[self.agentIndex]:
+        #     break
+        return actionsAvailable[re[self.agentIndex]][self.agentIndex]
 
-    def step(self, action):
-        # part, machine = action
+    def step(self, agent0Action, agent1Action):
+        part0, machine0 = agent0Action
+        part1, machine1 = agent1Action
         # global nextState, reward
         # print('the step action is: ', action)
-        self.currentState= self.mtp.get_state()
+        self.currentState= self.nextState  #self.mtp.get_state()  # check this out if we need to get the state here, should it be equal to the self.nextstate
         if self.mtp.t == 0:
             self.mtp.n_SB= [0, 0, 0, 0]
-            self.mtp.mp= np.zeros([n, ptypes])
+            self.mtp.mp= [[0,0,0],[0,0,0],[0,0,0],[0,0,0]] #np.zeros([n, ptypes])
             self.mtp.processing=[False, False, False, False]
             self.mtp.n_wait = [True, True, True, True]
             self.mtp.gs= [0, 0, 0, 0]
             self.mtp.ms= [1, 1, 1, 1]
+            self.mtp.mprogress= np.zeros(n)
+            self.mtp.mready= [False, False, False, False]
+            self.mtp.loading= np.zeros(n)
+            self.mtp.unloading = np.zeros(n)
+            self.mtp.g_load = np.zeros(n)
+            self.mtp.g_unload = np.zeros(n)
+            self.mtp.Tr = np.zeros(n)
+            self.mtp.b= [[0, 2, 2], [2, 0, 2], [1, 1, 2]]
+            self.mtp.TBF =[20, 30, 25, 25]
+            self.mtp.TTR=[100, 120, 125, 150]
 
         while self.mtp.t < T:
             [self.mtp.run_machine(k) for k in range(n)]
-            if np.any(mp== null_part):
-                part, machine = action
-                if all(mp[machine]== null_part):
+            if self.mtp.t!=0 and self.currentState != ():
+                # agent0Action = self.chooseActionRandomly()
+                # agent1Action = self.chooseActionRandomly()
+                agent0Action = self.chooseActionBasedOnQTable(self.currentState)
+                agent1Action = self.chooseActionBasedOnQTable(self.currentState)
+                while agent0Action[1] == agent1Action[1]:
+                    agent1Action = agent_1.chooseActionRandomly()
+                # action= self.chooseActionBasedOnQTable(self.currentState)
+                # part, machine = action
+                part0, machine0 = agent0Action
+                part1, machine1 = agent1Action
+            # if np.any(mp== null_part):
+            if self.mtp.mp_has_nullPart()==True:
+                # part, machine = action
+                mp_1= np.array(self.mtp.mp)
+                null_part_1= np.array(null_part)
+                if np.all(mp_1[machine0]== null_part_1) or np.all(mp_1[machine1]== null_part_1):
                     self.mtp.get_W()
-                    if self.mtp.W[machine]==0:
-                        self.mtp.run_gantry(action)
-                        self.mtp.run_machine(machine)
+                    if self.mtp.W[machine0]==0:
+                        self.mtp.run_gantry(agent0Action)
+                        self.mtp.run_machine(machine0)
                     else:
-                        self.mtp.downtime[machine]+=1
-                        self.mtp.total_downtime[machine]+=1
+                        self.mtp.downtime[machine0]+=1
+                        self.mtp.total_downtime[machine0]+=1
+                    if self.mtp.W[machine1]==0:
+                        self.mtp.run_gantry(agent1Action)
+                        self.mtp.run_machine(machine1)
+                    else:
+                        self.mtp.downtime[machine1]+=1
+                        self.mtp.total_downtime[machine1]+=1
                 else:
-                    if self.mtp.mprogress[machine] >= 0 and self.mtp.Tr[machine] == 0 and self.mtp.processing[machine] == False and self.mtp.n_wait[machine] == 1 and self.mtp.mready[machine] == False:
-                        self.mtp.run_gantry(action)
-                        self.mtp.run_machine(machine)
+                    if self.mtp.mprogress[machine0] >= 0 and self.mtp.Tr[machine0] == 0 and self.mtp.processing[machine0] == False and self.mtp.n_wait[machine0] == 1 and self.mtp.mready[machine0] == False:
+                        self.mtp.run_gantry(agent0Action)
+                        self.mtp.run_machine(machine0)
+                    if self.mtp.mprogress[machine1] >= 0 and self.mtp.Tr[machine1] == 0 and self.mtp.processing[machine1] == False and self.mtp.n_wait[machine1] == 1 and self.mtp.mready[machine1] == False:
+                        self.mtp.run_gantry(agent1Action)
+                        self.mtp.run_machine(machine1)
             else:
-                if any(self.mtp.mprogress) == 0 and any(self.mtp.Tr) == 0 and any(self.mtp.processing) == False and \
-                        any(self.mtp.n_wait) == 1 and any(self.mtp.mready) == False:
-                    action = agent(self.agentIndex).chooseActionBasedOnQTable(self.currentState)
-                    part, machine = action
-                    self.mtp.run_gantry(action)
-                    self.mtp.run_machine(machine)
+                if np.any(self.mtp.mprogress) == 0 and np.any(self.mtp.Tr) == 0 and np.any(self.mtp.processing) == False and \
+                        np.any(self.mtp.n_wait) == 1 and np.any(self.mtp.mready) == False:
+                    agent0Action = self.chooseActionBasedOnQTable(self.currentState)
+                    agent1Action = self.chooseActionBasedOnQTable(self.currentState)
+                    part0, machine0 = agent0Action
+                    part1, machine1 = agent1Action
+                    self.mtp.run_gantry(agent0Action)
+                    self.mtp.run_machine(machine0)
+                    self.mtp.run_gantry(agent1Action)
+                    self.mtp.run_machine(machine1)
             self.reward= self.mtp.get_reward()
             self.mtp.t += 1
             self.nextState= self.mtp.get_state()
+            if self.currentState != ():
+                self.nashQLearning(self.gamma, agent0Action, self.reward, self.currentState, self.nextState, agent1Action, self.reward)
+                # self.nashQLearning(self.gamma, agent0Action, self.reward, self.currentState, self.nextState, agent1Action, self.reward)
+            self.currentState = self.nextState
+            # print(f'the updated mtp parameters are: mprogress {self.mtp.mprogress}, ms: {self.mtp.ms}, mp: {self.mtp.mp}, n_wait: {self.mtp.n_wait}, processing: {self.mtp.processing}, prod_count: {self.mtp.prod_count}, cum_parts: {self.mtp.cum_parts}')
+        # print(f'nextstate is: {self.nextState}, reward: {self.reward}, terminated: {self.mtp.get_terminated()}, info: {self.mtp.get_info()}')
         return self.nextState, self.reward, self.mtp.get_terminated(), self.mtp.get_info()
 
 multiproduct_1= Multiproduct(ptypes, n, NASH.b, NASH.B, NASH.Tp, NASH.ng, NASH.MTTR, NASH.MTBF, T, NASH.Tl,NASH.Tu)
+agent_0 = agent(0)
+agent_1 = agent(1)
 # reward = multiproduct_1.get_reward()
 # nextState=()
 # agent_0= agent(0)
-def simulation(action_0, action_1):
-    # action_0 = action_0
-    # action_1 = action_1
-    # currentState = multiproduct_1.get_state()
-    # nextState= agent_1.nextState
-
-    # terminated = 0 #endgameflag
-    nextState, reward_0, terminated_0, info_0= agent_0.step(action_0)
-    nextState, reward_1, terminated_1, info_1= agent_1.step(action_1)
-
-    terminated= (terminated_0, terminated_1)
-    return reward_0, reward_1, nextState, terminated
-
+# def simulation(action_0, action_1):
+#     # action_0 = action_0
+#     # action_1 = action_1
+#     # currentState = multiproduct_1.get_state()
+#     # nextState= agent_1.nextState
+    #
+    # # terminated = 0 #endgameflag
+    # nextState, reward_0, terminated_0, info_0= agent_0.step(action_0,action_1)
+    # # print('the simulations result for nextState, reward_0, terminated_0, info_0= agent_0.step(action_0) is: ',agent_0.step(action_0))
+    # nextState, reward_1, terminated_1, info_1= agent_1.step(action_0,action_1)
+    # # print('the simulations result for nextState, reward_1, terminated_1, info_1= agent_1.step(action_1) is: ',agent_1.step(action_1))
+    # terminated= (terminated_0, terminated_1)
+    # # print("terminated (0 and 1): ", terminated)
+    # return reward_0, reward_1, nextState, terminated
 
 def resetStatus():
     # ms = [1,1,1,1]
     # mp= np.zeros([n,ptypes])
     resetState= (1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0)
     return resetState
-
-
-agent_0 = agent(0)
-agent_1 = agent(1)
 
 def run(agent_0 = agent, agent_1 = agent):
     gamma = 0.9
@@ -245,60 +299,81 @@ def run(agent_0 = agent, agent_1 = agent):
     currentState = multiproduct_1.get_state()
     timeStep = 0 # calculate the timesteps in one episode
     episodes = 0
-    terminated = False
+    terminated = 0
     agent_0.initialSelfQTable()
     agent_1.initialSelfQTable()
     agent_0.initialSelfAlpha()
     agent_1.initialSelfAlpha()
-    while episodes < 2: #100
-        print (episodes)
+
+    while episodes < 5:
+        print ('the episode in run is: ', episodes)
         while True:
             agent0Action = agent_0.chooseActionRandomly()
+            # print('the agent0action in run is: ', agent0Action)
             agent1Action = agent_1.chooseActionRandomly()
-            reward_0, reward_1, nextState, terminated = simulation(agent0Action, agent1Action)
-            agent_0.nashQLearning(gamma, agent0Action,reward_0, currentState, nextState, agent1Action, reward_1)
-            agent_1.nashQLearning(gamma, agent0Action, reward_0, currentState, nextState, agent1Action, reward_1)
-            if (terminated == True): # one episode of the game is end
+            while agent0Action[1]==agent1Action[1]:
+                agent1Action = agent_1.chooseActionRandomly()
+            # print('the agent1action in run is: ', agent1Action)
+            nextState, reward, terminated, info = agent_0.step(agent0Action, agent1Action)
+            # agent_0.nashQLearning(gamma, agent0Action, reward, currentState, nextState, agent1Action, reward)
+            # agent_1.nashQLearning(gamma, agent0Action, reward, currentState, nextState, agent1Action, reward)
+            # print('the reward_0, reward_1, nextState, terminated for simulation in run is: ', simulation(agent0Action, agent1Action))
+            # print('the output of agent0.nashQLearning in run is: ',agent_0.nashQLearning(gamma, agent0Action,reward_0, currentState, nextState, agent1Action, reward_1))
+            # print('the output of agent1.nashQLearning in run is: ',agent_1.nashQLearning(gamma, agent0Action, reward_0, currentState, nextState, agent1Action, reward_1))
+            if agent_0.mtp.terminated== True:
+
+            # if terminated == 1: # one episode of the game is end
                 episodes += 1
-                currentState = resetStatus()
+                agent_0.currentState = resetStatus()
+                agent_0.nextState = agent_0.currentState
+                agent_0.mtp.t = 0
                 break
-            currentState = nextState
+            agent_0.currentState = agent_0.nextState
+
+            # multiproduct_1.t += 1
 
 
-def test (agent_0 = agent, agent_1 = agent):
-    agent_0 = agent_0
-    agent_1 = agent_1
-    startState = resetStatus()
-    terminated = 0
-    runs = 0
-    agentActionList = []
-    currentState = startState
-    terminated = 0
-    while terminated != 1:
-        agent0Action = agent_0.chooseActionBasedOnQTable(currentState)
-        agent1Action = agent_1.chooseActionBasedOnQTable(currentState)
-        agentActionList.append([agent0Action, agent1Action])
-        reward0, reward1, nextState, terminated = simulation(agent0Action, agent1Action)
-        currentState = nextState
-    agentActionList.append(currentState)
-    return agentActionList
+# def test (agent_0 = agent, agent_1 = agent):
+#     agent_0 = agent_0
+#     agent_1 = agent_1
+#     startState = resetStatus()
+#     terminated = (0,0)
+#     runs = 0
+#     agentActionList = []
+#     currentState = startState
+#     # terminated = 0
+#     while any(terminated) == 0:
+#         agent0Action = agent_0.chooseActionBasedOnQTable(currentState)
+#         # print('the agent0_action selected based on q table: ', agent0Action)
+#         agent1Action = agent_1.chooseActionBasedOnQTable(currentState)
+#         # print('the agent1_action selected based on q table: ', agent1Action)
+#         agentActionList.append([agent0Action, agent1Action])
+#         reward0, reward1, nextState, terminated = simulation(agent0Action, agent1Action)
+#         currentState = nextState
+#         # print('the new current state in test under while is: ',currentState)
+#     agentActionList.append(currentState)
+#     # print('the agent actionlist in test is: ', agentActionList)
+#     return agentActionList
 
-runs = 0
-agentActionListEveryRun = {}
+# runs = 0
+# agentActionListEveryRun = {}
 # agent_0 = agent(0)
 # agent_1 = agent(1)
-run(agent_0, agent_1)
-agentActionListEveryRun[runs] = test(agent_0, agent_1)
-print (agentActionListEveryRun)
+# run(agent_0, agent_1)
+# agentActionListEveryRun[runs] = test(agent_0, agent_1)
+# print ('the agentActionListEveryRun is:',agentActionListEveryRun)
 
-def rungame (agent_0 = agent, agent_1 = agent):
-    agent_0 = agent_0
-    agent_1 = agent_1
-    run(agent_0, agent_1)
-    runGameResult = test(agent_0, agent_1)
-    return runGameResult
+# def rungame (agent_0 = agent, agent_1 = agent):
+#     agent_0 = agent_0
+#     agent_1 = agent_1
+#     # print('the agent_0 and agent_1 in rungame are: ', agent_0, agent_1)
+#     run(agent_0, agent_1)
+#     runGameResult = test(agent_0, agent_1)
+#     # print('the runGameResult is: ', runGameResult)
+#     return runGameResult
 
 if __name__ == "__main__":
+    run(agent_0, agent_1)
     # agent0= agent(0)
     # all_states= agent0.get_allStates()
     # state= all_states[0]
@@ -308,16 +383,16 @@ if __name__ == "__main__":
     # # q= agent0.initialSelfQTable()
     # # print(q)
     # # # playGameOne(agent_0, agent_1)
-    pool = multiprocessing.Pool(processes=2)
-    agentActionList = []
-    for i in range(2):
-        agentActionList.append(pool.apply_async(rungame, (agent_0, agent_1)))
-    pool.close()
-    pool.join()
+    # pool = multiprocessing.Pool(processes=2)
+    # agentActionList = []
+    # for i in range(2):
+    #     agentActionList.append(pool.apply_async(rungame, (agent_0, agent_1)))
+    # pool.close()
+    # pool.join()
 
     # print (agent_0.qTable[0][3, 6])
     # print (agent_0.qTable[1][3, 6])
     # print (agent_1.qTable[0][8, 5])
     # print (agent_1.qTable[1][8, 5])
-    for res in agentActionList:
-        print (res.get())
+    # for res in agentActionList:
+    #     print ('the res.get results in this: ',res.get())

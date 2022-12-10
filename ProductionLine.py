@@ -61,7 +61,7 @@ class Multiproduct:
 
     def run_machine(self, j):  # j is the machine number
 
-        if any(self.mp[j] > np.zeros(ptypes)): # if machine has a part
+        if np.any(self.mp[j] > np.zeros(ptypes)): # if machine has a part
             if self.ms[j] == 1: # if machine is running or down
                 self.downtime[j] = 0
                 if self.mready[j]==True:  # processing not started yet, part loaded,
@@ -120,9 +120,9 @@ class Multiproduct:
 
     def load_machine(self,j):
         if self.n_wait[j]==1:
-            if all(self.mp[j]==np.zeros(ptypes)):
+            if np.all(self.mp[j]==np.zeros(ptypes)):
                 if j!=0:
-                    if any(self.b[j - 1] > 0):
+                    if np.any(self.b[j - 1]) > 0:
                         self.gs[j]=1
                         self.g_load[j]=1
                         # self.loading[j] += 1
@@ -150,7 +150,7 @@ class Multiproduct:
 
     def unload_machine(self, j):
         if self.n_wait[j] == 1:
-            if any(self.mp[j] > np.zeros(ptypes)):
+            if np.any(self.mp[j] > np.zeros(ptypes)):
                 if j!=(n-1):
                     if np.sum(self.b[j])< self.B[j]:
                         self.gs[j]=1
@@ -235,33 +235,36 @@ class Multiproduct:
 
     def minus_buffer(self, action):
         part, machine = action
-        if all(self.mp[machine] == np.zeros(self.ptypes)):
-            if all(self.b[machine - 1] >= self.parts[part]):
+        if np.all(self.mp[machine] == np.zeros(self.ptypes)):
+            if np.all(self.b[machine - 1] >= self.parts[part]):
                 # self.mp[machine, part] = 1
                 self.b[machine - 1][part] -= self.parts[part][part]
                 self.mp[machine][part] = 1
             else:
-                # idxs = []
+                idxs = []
                 for idx, val in enumerate(self.b[machine - 1]):
-                    if any(val > [0, 0, 0]):
-                        # idxs.append(idx)
+                    if np.any(val != 0):    #[0,0,0]
+                        idxs.append(idx)
                         # available_parts= parts[idx]
-                        selected_part = idx[0]
-                        self.mp[machine, selected_part] = 1
-                        self.b[machine - 1, selected_part] -= self.parts[selected_part, selected_part]
+                        sp = []   #idx[0]
+                        if val != 0:
+                            sp.append(val)
+                        selected_part= self.b[machine - 1].index(sp[0])
+                        self.mp[machine][selected_part] = 1
+                        self.b[machine - 1][selected_part] -= self.parts[selected_part, selected_part]
                     else:
                         self.n_SB[machine] = 1
 
 
     def plus_buffer(self, action):
         part, machine = action
-        if any(self.mp[machine] > np.zeros(self.ptypes)) and machine!=(n-1):
+        if np.any(self.mp[machine] > np.zeros(self.ptypes)) and machine!=(n-1):
             part_to_unload = list(self.mp[machine]).index(1)  # it turns out the index of the part already on the machine. The index also represents the part type
             part_to_unload_sequence = list(self.p_sequence[part_to_unload])  # let say [1,0,1,1]
             # for k in part_to_unload_sequence:  # maybe we can use np.where() function after this step
             if part_to_unload_sequence[machine + 1] == 1:  # maybe a loop can be used to check the next process of the part in sequence
                 if self.B[machine] > np.sum(self.b[machine]):  # checking which next machine has an operation on this unloaded part
-                    self.b[machine, part_to_unload] += self.parts[part_to_unload, part_to_unload]
+                    self.b[machine][part_to_unload] += self.parts[part_to_unload, part_to_unload]
                     self.prod_count[machine, part_to_unload] += self.parts[part_to_unload, part_to_unload]
                     # self.mp[machine, part] = 1  # new action: assign part j to machine i
                 else:
@@ -429,7 +432,7 @@ class Multiproduct:
         self.t=0
 
     def get_state(self):
-        s = [ms[j] for j in range(n)] + [mp[j] for j in range(n)]
+        s = [self.ms[j] for j in range(n)] + [self.mp[j] for j in range(n)]
         a = tuple(s)
         mstates = tuple(y for x in a for y in (x if isinstance(x, list) else (x,)))
         return mstates
@@ -538,6 +541,20 @@ class Multiproduct:
     def get_reward_scale(self):
         return None
 
+    def mp_has_nullPart(self):
+        # self.mp = np.array([[0, 0, 0], [0, 1, 0], [0, 1, 0], [1, 0, 0]])
+        null_part = [0, 0, 0]
+        result = []
+        for i in self.mp:
+            if np.all(i == null_part):
+                result.append(1)
+            else:
+                result.append(0)
+        if np.sum(result) == 0:
+            test = False
+        else:
+            test = True
+        return test
 
     def step(self):
         # part, machine = action
@@ -557,7 +574,7 @@ class Multiproduct:
             if np.any(self.mp== null_part):
                 action = random.choice(actions_list)
                 part, machine = action
-                if all(self.mp[machine]== null_part):
+                if np.all(self.mp[machine]== null_part):
                     self.get_W()
                     # print('self.W[machine]=', self.W[machine])
                     if self.W[machine]==0:
@@ -572,8 +589,8 @@ class Multiproduct:
                         self.run_gantry(action)
                         self.run_machine(machine)
             else:
-                if any(self.mprogress == 0) and any(self.Tr == 0) and any(self.processing == False) and \
-                        any(self.n_wait == 1) and any(self.mready == False):
+                if np.any(self.mprogress == 0) and np.any(self.Tr == 0) and np.any(self.processing == False) and \
+                        np.any(self.n_wait == 1) and np.any(self.mready == False):
                     action = random.choice(actions_list)
                     part, machine = action
                     self.run_gantry(action)
