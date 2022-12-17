@@ -292,12 +292,12 @@ def lemkeHowson(m1, m2):
 # m1 = np.array([[4, 1], [5, 3]])
 # m2 = np.array([[4, 5], [1, 3]])
 
-# m1 = np.array([[2, 0], [0, 1]])
-# m2 = np.array([[1, 0], [0, 2]])
+# m1 = np.array([[2, 3], [-2, 1]])
+# m2 = np.array([[1, 4], [-1, 2]])
 #
-# m1 = np.array([[0, 0], [100, 0]])
-# m2 = np.array([[0, 0], [0, 0]])
-#
+m1 = np.array([[-10, 1], [4, 2]])
+m2 = np.array([[4, 2], [3, 5]])
+# print(m1.shape[1])
 #
 # m11 = matrix.Matrix(m1.shape[0], m1.shape[1])
 # for i in range(m1.shape[0]):
@@ -309,9 +309,11 @@ def lemkeHowson(m1, m2):
 #         m22.setItem(i+1, j+1, m2[i][j])
 #
 # probprob = lemkeHowson(m11, m22)
-#
+# print(probprob)
 # prob1 = np.array(probprob[0])
+# print(prob1)
 # re0 = np.where(prob1 == np.max(prob1))[0][0]
+# print(re0)
 # prob2 = np.array(probprob[1])
 # re1 = np.where(prob2 == np.max(prob2))[0][0]
 #
@@ -319,3 +321,9 @@ def lemkeHowson(m1, m2):
 # nash2 = m2[re0][re1]
 # print (nash1)
 # print (nash2)
+# row= np.array([[0,1,2],[1,0,1]])
+# col= np.array([[1,0,1],[1,1,0]])
+# m0= matrix.Matrix(row,col)
+# # m1= matrix.Matrix([])
+# # probprob = lemkeHowson(m0, m1)
+# # extra=[1,1,0], [2,0,1]
