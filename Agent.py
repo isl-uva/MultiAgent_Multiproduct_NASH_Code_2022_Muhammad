@@ -34,7 +34,10 @@ class agent:
         # self.states= Multiproduct.get_state()
         self.actual_states = self.get_allStates()
         self.gamma=0.9
-        # self.production_data = []
+        self.num_episodes=10
+        self.production_data = [[] for i in range(self.num_episodes)]
+        self.waiting_data= [[] for i in range(self.num_episodes)]
+        self.reward_data= [[] for i in range(self.num_episodes)]
 
     def get_validActions(self):
         for i in self.actual_states:
@@ -155,38 +158,23 @@ class agent:
         self.qTable[0][self.currentState][action_tuple]= (1 - alpha_var)* self.qTable[0][self.currentState][action_tuple] + alpha_var * (agent0Reward + self.gamma * nashQValues[0])
         # print('self.qTable[0][self.currentState][(agent0Action, agent1Action)]', self.qTable[0][self.currentState][(agent0Action, agent1Action)])
         self.qTable[1][self.currentState][action_tuple] = (1 - alpha_var) * self.qTable[1][self.currentState][action_tuple]+ alpha_var * (agent1Reward + self.gamma * nashQValues[1])
-        # print('self.qTable[1][self.currentState][(agent0Action, agent1Action)]',self.qTable[1][self.currentState][(agent0Action, agent1Action)])
-        # self.timeStep += 1
-        # print('the timestep is: ', self.timeStep)
 
     def chooseActionBasedOnQTable(self, currentState):
         # print('the currentStatein chooseActioncased on Qtable is: ',currentState)
         (m0, m1) = self.constructPayoffTable(currentState)
         probprob = lemkeHowson.lemkeHowson(m0, m1)
-        # print("probprob: ",probprob)
         prob0 = np.array(probprob[0])
         re0 = np.where(prob0 == np.max(prob0))[0][0]
         prob1 = np.array(probprob[1])
         re1 = np.where(prob1 == np.max(prob1))[0][0]
         re = [re0, re1]
-        # print('the re in chooseactionbasedonQtable is: ',re)
         actions_valid= self.get_validActions()
-        # print('the actions_valid are: ', actions_valid)
         actionsAvailable = actions_valid[currentState]
-        # for i in actionsAvailable:
-        #     aAvailable= tuple(i)
-        # print('the actionsavailable from chooseactionbasedonQtable are:',actionsAvailable)
-        # print('actionsAvailable[re[self.agentIndex]]', actionsAvailable[re[self.agentIndex]][self.agentIndex])
-        # c= None
-        # for c in re[self.agentIndex]:
-        #     break
         return actionsAvailable[re[self.agentIndex]][self.agentIndex]
 
-    def step(self, agent0Action, agent1Action):
+    def step(self, agent0Action, agent1Action, episode):
         part0, machine0 = agent0Action
         part1, machine1 = agent1Action
-        # global nextState, reward
-        # print('the step action is: ', action)
         self.currentState= self.nextState  #self.mtp.get_state()  # check this out if we need to get the state here, should it be equal to the self.nextstate
         if self.mtp.t == 0:
             self.mtp.n_SB= [0, 0, 0, 0]
@@ -202,12 +190,16 @@ class agent:
             self.mtp.g_load = np.zeros(n)
             self.mtp.g_unload = np.zeros(n)
             self.mtp.Tr = np.zeros(n)
-            self.mtp.b= [[0, 3, 3], [3, 0, 3], [3, 3, 3]]
+            self.mtp.b= [[0, 5, 5], [5, 0, 5], [5, 5, 5]]
             self.mtp.TTR =[20, 30, 25, 25]
-            self.mtp.TBF=[10, 12, 12, 15]
+            self.mtp.TBF=[100, 120, 125, 150]
             self.mtp.prod_count = np.zeros([n, ptypes])
             self.mtp.waiting_time= np.zeros(n)
-            # self.production_data.append(self.mtp.prod_count)
+            self.mtp.downtime = np.zeros(n)
+            self.mtp.W = np.zeros(n)
+            self.production_data[episode].append(self.mtp.prod_count.copy())
+            self.waiting_data[episode].append(self.mtp.waiting_time.copy())
+            self.reward_data[episode].append(self.reward)
         while self.mtp.t < T:
             # self.production_data.append(self.mtp.prod_count)
             [self.mtp.run_machine(k) for k in range(n)]
@@ -243,25 +235,49 @@ class agent:
                         self.mtp.downtime[machine1]+=1
                         self.mtp.total_downtime[machine1]+=1
                 else:
-                    if self.mtp.mprogress[machine0] >= 0 and self.mtp.Tr[machine0] == 0 and self.mtp.processing[machine0] == False and self.mtp.n_wait[machine0] == 1 and self.mtp.mready[machine0] == False:
-                        self.mtp.run_gantry(agent0Action)
-                        self.mtp.run_machine(machine0)
-                    if self.mtp.mprogress[machine1] >= 0 and self.mtp.Tr[machine1] == 0 and self.mtp.processing[machine1] == False and self.mtp.n_wait[machine1] == 1 and self.mtp.mready[machine1] == False:
-                        self.mtp.run_gantry(agent1Action)
-                        self.mtp.run_machine(machine1)
+                    self.mtp.get_W()
+                    if self.mtp.W[machine0] == 0:
+                        if self.mtp.mprogress[machine0] >= 0 and self.mtp.Tr[machine0] == 0 and self.mtp.processing[machine0] == False and self.mtp.n_wait[machine0] == 1 and self.mtp.mready[machine0] == False:
+                            self.mtp.run_gantry(agent0Action)
+                            self.mtp.run_machine(machine0)
+                    else:
+                        self.mtp.downtime[machine0] += 1
+                        self.mtp.total_downtime[machine0] += 1
+                    if self.mtp.W[machine1] == 0:
+                        if self.mtp.mprogress[machine1] >= 0 and self.mtp.Tr[machine1] == 0 and self.mtp.processing[machine1] == False and self.mtp.n_wait[machine1] == 1 and self.mtp.mready[machine1] == False:
+                            self.mtp.run_gantry(agent1Action)
+                            self.mtp.run_machine(machine1)
+                    else:
+                        self.mtp.downtime[machine1] += 1
+                        self.mtp.total_downtime[machine1] += 1
             else:
+                self.mtp.get_W()
                 if np.any(self.mtp.mprogress == 0) and np.any(self.mtp.Tr == 0):
                     if False in self.mtp.processing and 1 in self.mtp.n_wait and False in self.mtp.mready:
                         # if list(self.mtp.mprogress).index(0)== list(self.mtp.Tr).index(0):
                         machine_to_be_unloaded= self.mtp.machine_to_be_unloaded()
-                        self.mtp.unload_machine(machine_to_be_unloaded)
-                        agent0Action= self.mtp.select_action(machine_to_be_unloaded)
-                        agent1Action= self.chooseActionRandomly()
-                        part, machine = agent0Action
-                        self.mtp.plus_buffer(agent0Action)
-                        self.mtp.mp[machine] = [0,0,0]
-                        self.mtp.run_gantry(agent0Action)
-                        self.mtp.run_machine(machine)
+                        if (np.sum(self.mtp.b[machine_to_be_unloaded-1])>0 or machine_to_be_unloaded==0) and self.mtp.next_buffer_has_space(machine_to_be_unloaded)==True:
+                            self.mtp.unload_machine(machine_to_be_unloaded)
+                            agent0Action= self.mtp.select_action(machine_to_be_unloaded)
+                            agent1Action= self.chooseActionRandomly()
+                            part, machine = agent0Action
+                            self.mtp.plus_buffer(agent0Action)
+                            self.mtp.mp[machine] = [0,0,0]
+                            self.mtp.run_gantry(agent0Action)
+                            self.mtp.run_machine(machine)
+                        else:
+                            machine_to_be_unloaded = self.mtp.next_machine_to_be_unloaded()
+                            if machine_to_be_unloaded != None:
+                                if (np.sum(self.mtp.b[machine_to_be_unloaded - 1]) > 0 or machine_to_be_unloaded == 0) and self.mtp.next_buffer_has_space(machine_to_be_unloaded) == True:
+                                    self.mtp.unload_machine(machine_to_be_unloaded)
+                                    agent0Action = self.mtp.select_action(machine_to_be_unloaded)
+                                    agent1Action = self.chooseActionRandomly()
+                                    part, machine = agent0Action
+                                    self.mtp.plus_buffer(agent0Action)
+                                    self.mtp.mp[machine] = [0, 0, 0]
+                                    self.mtp.run_gantry(agent0Action)
+                                    self.mtp.run_machine(machine)
+
             self.reward= self.mtp.get_reward()
             self.mtp.t += 1
             self.nextState= self.mtp.get_state()
@@ -269,10 +285,9 @@ class agent:
                 self.nashQLearning(self.gamma, agent0Action, self.reward, self.currentState, self.nextState, agent1Action, self.reward)
                 # self.nashQLearning(self.gamma, agent0Action, self.reward, self.currentState, self.nextState, agent1Action, self.reward)
             self.currentState = self.nextState
-            # print(f'the updated mtp parameters are: mprogress {self.mtp.mprogress}, ms: {self.mtp.ms}, mp: {self.mtp.mp}, n_wait: {self.mtp.n_wait}, processing: {self.mtp.processing}, prod_count: {self.mtp.prod_count}, cum_parts: {self.mtp.cum_parts}')
-        # print(f'nextstate is: {self.nextState}, reward: {self.reward}, terminated: {self.mtp.get_terminated()}, info: {self.mtp.get_info()}')
-        #     self.production_data.append(self.mtp.prod_count)
-        #     self.mtp.get_prod_count()
+            self.production_data[episode].append(self.mtp.prod_count.copy())
+            self.waiting_data[episode].append(self.mtp.waiting_time.copy())
+            self.reward_data[episode].append(self.reward)
         return self.nextState, self.reward, self.mtp.get_terminated(), self.mtp.get_info()
 
 multiproduct_1= Multiproduct(ptypes, n, NASH.b, NASH.B, NASH.Tp, NASH.ng, NASH.MTTR, NASH.MTBF, T, NASH.Tl,NASH.Tu)
@@ -296,12 +311,15 @@ def run(agent_0 = agent, agent_1 = agent):
     agent_1.initialSelfQTable()
     agent_0.initialSelfAlpha()
     agent_1.initialSelfAlpha()
-    episodes = 0
+    episode = 0
 
-    while episodes < 5:
-        print ('the episode in run is: ', episodes)
+    while episode < 20:    #agent_0.num_episodes:
+        print ('the episode in run is: ', episode)
         print('Prod.Count: ', agent_0.mtp.prod_count, 'waiting time: ', agent_0.mtp.waiting_time, 'reward is: ',agent_0.reward )
-        # print('production dat: ', agent_0.production_data)
+        # print('production data: ', agent_0.production_data)
+        prod_data = np.array(agent_0.production_data, dtype= object)
+        # max_prod = prod_data.max()
+        print('prod_data shape: ',prod_data.shape)
         # print('prod_counts: ', agent_0.mtp.get_prod_count())
         while True:
             agent0Action = agent_0.chooseActionRandomly()
@@ -310,85 +328,143 @@ def run(agent_0 = agent, agent_1 = agent):
             while agent0Action[1]==agent1Action[1]:
                 agent1Action = agent_1.chooseActionRandomly()
             # print('the agent1action in run is: ', agent1Action)
-            nextState, reward, terminated, info = agent_0.step(agent0Action, agent1Action)
-            # agent_0.nashQLearning(gamma, agent0Action, reward, currentState, nextState, agent1Action, reward)
-            # agent_1.nashQLearning(gamma, agent0Action, reward, currentState, nextState, agent1Action, reward)
-            # print('the reward_0, reward_1, nextState, terminated for simulation in run is: ', simulation(agent0Action, agent1Action))
-            # print('the output of agent0.nashQLearning in run is: ',agent_0.nashQLearning(gamma, agent0Action,reward_0, currentState, nextState, agent1Action, reward_1))
-            # print('the output of agent1.nashQLearning in run is: ',agent_1.nashQLearning(gamma, agent0Action, reward_0, currentState, nextState, agent1Action, reward_1))
+            nextState, reward, terminated, info = agent_0.step(agent0Action, agent1Action, episode)
             if agent_0.mtp.terminated== True:
-
-            # if terminated == 1: # one episode of the game is end
-                episodes += 1
+                episode += 1
                 agent_0.currentState = resetStatus()
                 agent_0.nextState = agent_0.currentState
                 agent_0.mtp.t = 0
                 break
             agent_0.currentState = agent_0.nextState
 
-            # multiproduct_1.t += 1
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    np.set_printoptions(threshold= np.inf)
+
+    def plot_std_shade(curves_list,title,xlabel,ylabel, c='b'):
+
+        curves=np.array(curves_list)
+        mean_curve=curves.mean(axis=0)
+        std_curve=curves.std(axis=0)
+        min_curve= curves.min(axis=0)
+        max_curve= curves.max(axis=0)
 
 
-# def test (agent_0 = agent, agent_1 = agent):
-#     agent_0 = agent_0
-#     agent_1 = agent_1
-#     startState = resetStatus()
-#     terminated = (0,0)
-#     runs = 0
-#     agentActionList = []
-#     currentState = startState
-#     # terminated = 0
-#     while any(terminated) == 0:
-#         agent0Action = agent_0.chooseActionBasedOnQTable(currentState)
-#         # print('the agent0_action selected based on q table: ', agent0Action)
-#         agent1Action = agent_1.chooseActionBasedOnQTable(currentState)
-#         # print('the agent1_action selected based on q table: ', agent1Action)
-#         agentActionList.append([agent0Action, agent1Action])
-#         reward0, reward1, nextState, terminated = simulation(agent0Action, agent1Action)
-#         currentState = nextState
-#         # print('the new current state in test under while is: ',currentState)
-#     agentActionList.append(currentState)
-#     # print('the agent actionlist in test is: ', agentActionList)
-#     return agentActionList
+        N=curves.shape[1]
+        x=np.arange(N)
+        plt.plot(x,mean_curve,c+'-',label=title)
+        plt.xlabel(xlabel)
+        plt.ylabel(ylabel)
+        plt.fill_between(x,min_curve,max_curve,color=c,alpha=0.3)
+        # plt.fill_between(x, mean_curve - std_curve, mean_curve + std_curve, color=c, alpha=0.2)
+        plt.legend()
+        plt.ylabel(ylabel)
+        # plt.fill_between(x,mean_curve-std_curve,mean_curve+std_curve,color=c,alpha=0.2)
+        # plt.legend()
 
-# runs = 0
-# agentActionListEveryRun = {}
-# agent_0 = agent(0)
-# agent_1 = agent(1)
-# run(agent_0, agent_1)
-# agentActionListEveryRun[runs] = test(agent_0, agent_1)
-# print ('the agentActionListEveryRun is:',agentActionListEveryRun)
+    sns.set()
+    colors = ['r', 'g', 'b', 'y', 'm', 'c', 'k']
+    prod_data= np.array(agent_0.production_data)
+    max_prod = prod_data.max()
+    print('production data shape: ', prod_data.shape)
+    # print('production_data',agent_0.production_data[0])
+    plt.figure(figsize=(20,4))
+    for e in range(prod_data.shape[0]):
+        for p in range(prod_data.shape[3]):
+            plt.subplot(1,prod_data.shape[0], e+1)
+            plt.plot(prod_data[e][:,-1,p], label= f"part= {p}", color= colors[p])
+        plt.title(f"episode={e}")
+        plt.ylim(0,max_prod)
+        plt.legend()
+    plt.show()
+    #
+    for p in range(prod_data.shape[3]):
+        curve_list= prod_data[:,:,-1,p]
+        plot_std_shade(curve_list, f"part= {p}", 'time_steps', 'prod_count', colors[p])
+    plt.show()
 
-# def rungame (agent_0 = agent, agent_1 = agent):
-#     agent_0 = agent_0
-#     agent_1 = agent_1
-#     # print('the agent_0 and agent_1 in rungame are: ', agent_0, agent_1)
-#     run(agent_0, agent_1)
-#     runGameResult = test(agent_0, agent_1)
-#     # print('the runGameResult is: ', runGameResult)
-#     return runGameResult
+    waiting_data= np.array(agent_0.waiting_data)
+    max_wait = waiting_data.max()
+    print('waiting_data shape: ',waiting_data.shape)
+    # print('waiting_data', agent_0.waiting_data[0])
+    plt.figure(figsize=(20, 4))
+    for e in range(waiting_data.shape[0]):
+        for m in range(waiting_data.shape[2]):
+            plt.subplot(1, waiting_data.shape[0], e + 1)
+            plt.plot(waiting_data[e][:, m], label=f"machine= {m}", color=colors[m])
+        plt.title(f"episode={e}")
+        plt.ylim(0, max_wait)
+        plt.legend()
+    plt.show()
+    #
+    for m in range(waiting_data.shape[2]):
+        curve_list = waiting_data[:, :, m]
+        plot_std_shade(curve_list, f"machine= {m}", 'time_steps', 'waiting_time', colors[m])
+    plt.show()
+
+
+    reward_data = np.array(agent_0.reward_data)
+    max_reward = reward_data.max()
+    min_reward = reward_data.min()
+    print('reward_data_shape: ',reward_data.shape)
+    # print('reward_data', agent_0.reward_data[0])
+    plt.figure(figsize=(20, 4))
+    for e in range(reward_data.shape[0]):
+        plt.subplot(1, reward_data.shape[0], e + 1)
+        plt.plot(reward_data[e][1:])
+        plt.title(f"episode={e}")
+        plt.ylim(min_reward, max_reward)
+        plt.legend()
+    plt.show()
+    #
+    x = np.arange(1,reward_data.shape[0]+1, dtype= int)
+    plt.plot(x,reward_data[:, -1])
+    plt.show()
+
+# production files
+    with open('prod_count_0.csv', 'w+') as prod_file:
+        result_output = ''
+        result_output += str(prod_data[0])
+        prod_file.write(result_output)
+    with open('prod_count_1.csv', 'w+') as prod_file:
+        result_output = ''
+        result_output += str(prod_data[1])
+        prod_file.write(result_output)
+    with open('prod_count_2.csv', 'w+') as prod_file:
+        result_output = ''
+        result_output += str(prod_data[2])
+        prod_file.write(result_output)
+    with open('prod_count_3.csv', 'w+') as prod_file:
+        result_output = ''
+        result_output += str(prod_data[3])
+        prod_file.write(result_output)
+
+# waiting files
+    with open('waiting_data_0.csv', 'w+') as waiting_file:
+        result_output = ''
+        result_output += str(waiting_data[0])
+        waiting_file.write(result_output)
+    with open('waiting_data_1.csv', 'w+') as waiting_file:
+        result_output = ''
+        result_output += str(waiting_data[1])
+        waiting_file.write(result_output)
+    with open('waiting_data_2.csv', 'w+') as waiting_file:
+        result_output = ''
+        result_output += str(waiting_data[2])
+        waiting_file.write(result_output)
+    with open('waiting_data.csv_3', 'w+') as waiting_file:
+        result_output = ''
+        result_output += str(waiting_data[3])
+        waiting_file.write(result_output)
+
+# reward files
+    with open('reward_data.csv', 'w+') as reward_file:
+        result_output = ''
+        result_output += str(reward_data)
+        reward_file.write(result_output)
+
 
 if __name__ == "__main__":
     run(agent_0, agent_1)
-    # agent0= agent(0)
-    # all_states= agent0.get_allStates()
-    # state= all_states[0]
-    # print('the state is: ', state)
-    # action= agent0.chooseActionRandomly()
-    # payofftable= agent0.constructPayoffTable(state)
-    # # q= agent0.initialSelfQTable()
-    # # print(q)
-    # # # playGameOne(agent_0, agent_1)
-    # pool = multiprocessing.Pool(processes=2)
-    # agentActionList = []
-    # for i in range(2):
-    #     agentActionList.append(pool.apply_async(rungame, (agent_0, agent_1)))
-    # pool.close()
-    # pool.join()
 
-    # print (agent_0.qTable[0][3, 6])
-    # print (agent_0.qTable[1][3, 6])
-    # print (agent_1.qTable[0][8, 5])
-    # print (agent_1.qTable[1][8, 5])
-    # for res in agentActionList:
-    #     print ('the res.get results in this: ',res.get())
+

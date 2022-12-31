@@ -60,7 +60,6 @@ class Multiproduct:
         return self.actionList
 
     def run_machine(self, j):  # j is the machine number
-
         if np.any(self.mp[j] > np.zeros(ptypes)): # if machine has a part
             if self.ms[j] == 1: # if machine is running or down
                 self.downtime[j] = 0
@@ -89,13 +88,6 @@ class Multiproduct:
                             self.gs[j] = 0
                             self.g_load[j] = 0
                             self.mready[j]= True
-                    # if self.n_wait[j]==0 and self.processing[j]==True and self.unload_check[j]==True:
-                    #     self.g_unload[j] = 1
-                    #     self.unloading[j] += 1
-                    #     if self.unloading[j] == self.Tu[j]:
-                    #         self.unloading[j] = 0
-                    #         self.g_unload[j] = 0
-                    #         self.unload_check[j]= False
             else:
                 self.downtime[j]+=1
                 self.total_downtime += 1
@@ -104,14 +96,13 @@ class Multiproduct:
             self.processing[j] = False
             self.waiting_time[j]+=1
             self.mready[j]= False
-
         return self.Tr[j], self.cum_parts[j], self.waiting_time[j], self.downtime[j], self.n_wait[j]
 
     def load_machine(self,j):
         if self.n_wait[j]==1:
-            if np.all(self.mp[j]==np.zeros(ptypes)):
+            if np.sum(self.mp[j])==0:
                 if j!=0:
-                    if np.any(self.b[j - 1]) > 0:
+                    if np.sum(self.b[j - 1]) > 0:
                         self.gs[j]=1
                         self.g_load[j]=1
                     else:
@@ -127,9 +118,10 @@ class Multiproduct:
 
     def unload_machine(self, j):
         if self.n_wait[j] == 1:
-            if np.any(self.mp[j] > np.zeros(ptypes)):
+            if np.sum(self.mp[j]) > 0:
                 if j!=(n-1):
-                    if np.sum(self.b[j])< self.B[j]:
+                    if self.next_buffer_has_space(j)==True:
+                    # if np.sum(self.b[j])< self.B[j]:
                         self.gs[j]=1
                     else:
                         self.n_SB[j]=1
@@ -146,17 +138,25 @@ class Multiproduct:
         if (np.sum(gs)<ng) and self.gs[machine] == 0:  # if gantry is available and machine is not assigned a gantry
             if self.ms[machine]==1:  # if machine to be loaded is up
                 if np.sum(self.mp[machine])==0:    # machine has no part and is waiting to be loaded
-                    if not self.processing[machine] and not self.mready[machine] and self.n_SB[machine]==0:
-                        self.load_machine(machine)
-                        self.n_wait[machine]=0
-                        self.run_buffer(action)
-                        self.processing[machine] = True
-                        self.Tr[machine]=0
-                        self.mp[machine][part] = self.parts[part][part]
+                    if not self.processing[machine] and not self.mready[machine]:
+                        if machine!=0 and (self.n_SB[machine]==0 or np.sum(b[machine-1])>0):
+                            self.load_machine(machine)
+                            self.n_wait[machine]=0
+                            self.run_buffer(action)
+                            self.processing[machine] = True
+                            self.Tr[machine]=0
+                            self.mp[machine][part] = self.parts[part][part]
+                        if machine==0:
+                            self.load_machine(machine)
+                            self.n_wait[machine] = 0
+                            self.run_buffer(action)
+                            self.processing[machine] = True
+                            self.Tr[machine] = 0
+                            self.mp[machine][part] = self.parts[part][part]
                     else:
                         print('check if there is any part in machine and whether it is SB')
                 else:
-                    if not self.processing[machine] and not self.mready[machine] and self.n_wait[machine]==1 and self.Tr[machine]==0:
+                    if not self.processing[machine] and not self.mready[machine] and self.n_wait[machine]==1 and self.Tr[machine]==0 and (self.n_SB[machine]==0 or (np.sum(self.b[machine])< self.B[machine] or machine==(n-1))):
                         self.unload_machine(machine)
                         self.plus_buffer(action)
                         self.mp[machine]= [0,0,0]
@@ -174,13 +174,14 @@ class Multiproduct:
                             self.mp[machine][part] = 1
         elif (self.gs[machine] == 1) and not self.processing[machine] and not self.mready[machine] and self.n_wait[machine]==1 and self.Tr[machine]==0 and np.sum(self.mp[machine])==0:
             self.load_machine(machine)
-            self.n_wait[machine] = 0
-            self.processing[machine]= True
-            if machine!=0:
-                self.minus_buffer(action)
-            else:
-            # if np.all(self.b[machine - 1] >= self.parts[part]):
-                self.mp[machine][part] = 1
+            if self.n_SB[machine] != 1:
+                self.n_wait[machine] = 0
+                self.processing[machine]= True
+                if machine!=0:
+                    self.minus_buffer(action)
+                else:
+                # if np.all(self.b[machine - 1] >= self.parts[part]):
+                    self.mp[machine][part] = 1
         elif np.sum(gs) == ng:
             self.n_wait[machine]=1
             self.processing[machine] = False
@@ -221,25 +222,51 @@ class Multiproduct:
                     self.b[machine][part_to_unload] += self.parts[part_to_unload, part_to_unload]
                     self.prod_count[machine, part_to_unload] += self.parts[part_to_unload, part_to_unload]
                     # self.mp[machine, part] = 1  # new action: assign part j to machine i
-                else:
-                    self.n_SB[machine] = 1
+                # else:
+                #     self.n_SB[machine] = 1
             elif part_to_unload_sequence[machine + 2] == 1:
                 if self.B[machine + 1] > np.sum(self.b[machine + 1]):  # checking which next machine has an operation on this unloaded part
                     self.b[machine + 1][part_to_unload] += self.parts[part_to_unload, part_to_unload]
                     self.prod_count[machine, part_to_unload] += self.parts[part_to_unload, part_to_unload]
                     # self.mp[machine, part] = 1
-                else:
-                    self.n_SB[machine] = 1
+                # else:
+                #     self.n_SB[machine] = 1
             elif part_to_unload_sequence[machine + 3] == 1:
                 if self.B[machine + 2] > np.sum(self.b[machine + 2]):  # checking which next machine has an operation on this unloaded part
                     self.b[machine + 2][part_to_unload] += self.parts[part_to_unload, part_to_unload]
                     self.prod_count[machine, part_to_unload] += self.parts[part_to_unload, part_to_unload]
                     # self.mp[machine, part] = 1
-                else:
-                    self.n_SB[machine] = 1
+                # else:
+                #     self.n_SB[machine] = 1
         if machine == (n-1) and np.any(self.mp[machine] > np.zeros(self.ptypes)):
             part_to_unload = list(self.mp[machine]).index(1)
             self.prod_count[machine][part_to_unload]+=1
+
+    def next_buffer_has_space(self, machine):
+        if np.sum(self.mp[machine]) > 0 and machine!=(n-1):
+            part_to_unload = list(self.mp[machine]).index(1)
+            part_to_unload_sequence = list(self.p_sequence[part_to_unload])
+
+            if part_to_unload_sequence[machine + 1] == 1:
+                if self.B[machine] > np.sum(self.b[machine]):
+                    return True
+                else:
+                    return False
+            elif machine != 2 and part_to_unload_sequence[machine + 2] == 1:
+                if self.B[machine + 1] > np.sum(self.b[machine + 1]):
+                    return True
+                else:
+                    return False
+            elif machine == 0 and part_to_unload_sequence[machine + 3] == 1:
+                if self.B[machine + 2] > np.sum(self.b[machine + 2]):
+                    return True
+                else:
+                    return False
+            else:
+                return False
+        if machine == (n-1) and np.sum(self.mp[machine]) > 0:
+            return True
+
     def run_buffer(self, action):  # action: (part, mach)
         part, machine = action
         # gantry_status= self.Gantry(action)
@@ -295,7 +322,7 @@ class Multiproduct:
 
         for j in range(ptypes):
             if self.prod_count[-1][j]> D[j]:
-                cos[j]= self.prod_count[-1][j]- D[j]
+                cos[j]= 0 #self.prod_count[-1][j]- D[j]
             else:
                 cos[j]=0
         CoS= np.sum(omega_d * cos)
@@ -390,8 +417,34 @@ class Multiproduct:
                     machine_to_be_unload = i
                 # else:
                 #     print('No machine is ready')
-        return machine_to_be_unload
+        if machine_to_be_unload != None:
+            return machine_to_be_unload
 
+    def next_machine_to_be_unloaded(self):
+        next_machine_to_be_unload= None
+        for i in range(3):   # len(b)= 3
+            if i < 2:
+                if self.next_buffer_has_space(i+1) == True:
+                    if np.sum(self.b[i]) > 0 and self.processing[i + 1] == False and self.mready[i + 1] == False and self.mprogress[i + 1] == 0:
+                        next_machine_to_be_unload = (i + 1)
+                        break
+                    else:
+                        if self.next_buffer_has_space(0) == True:
+                            if self.processing[0] == False and self.mready[0] == False and self.mprogress[0] == 0:
+                                next_machine_to_be_unload = 0
+                                break
+                else:
+                    if self.next_buffer_has_space(0) == True:
+                        if self.processing[0] == False and self.mready[0] == False and self.mprogress[0] == 0:
+                            next_machine_to_be_unload = 0
+                            break
+            elif np.sum(b[i]) > 0 and self.processing[i + 1] == False and self.mready[i + 1] == False and self.mprogress[i + 1] == 0:
+                    next_machine_to_be_unload = (i + 1)
+                    break
+            else:
+                print('no machine is ready, SB')
+        if next_machine_to_be_unload != None:
+            return next_machine_to_be_unload
 
     def step(self):
         # part, machine = action

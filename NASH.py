@@ -5,7 +5,7 @@ import random
 
 machines = [1, 2, 3, 4]  # machines, it is just for downtime as it needs a list
 n = len(machines)
-b = np.array([[0, 3, 3], [3, 0, 3], [3, 3, 3]]).tolist()
+b = np.array([[0, 5, 5], [5, 0, 5], [5, 5, 5]]).tolist()
 # print(type(b))
 # print(b)
 parts = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])  #.tolist()
@@ -18,14 +18,14 @@ p_sequence = np.array([[1, 0, 1, 1], [1, 1, 0, 1], [1, 1, 1, 1]]).tolist()
 # print(type(p_sequence))
 B = np.array([15, 15, 15]).tolist()
 # print(type(B))
-Tp = np.array([2, 3, 2, 3]).tolist()
+Tp = np.array([4, 5, 4, 5]).tolist()
 # print(type(Tp))
 # Tl= np.array([1,1,1,1])
 # Tu= np.array([1,1,1,1])
 ng = 2
 MTTR = np.array([20, 30, 25, 25]).tolist()
 # print(type(MTTR))
-MTBF = np.array([10, 12, 12, 15]).tolist()
+MTBF = np.array([100, 120, 125, 150]).tolist()
 # print(type(MTBF))
 ms = np.array([1, 1, 1, 1]).tolist()  # either 0/1 machine on/off
 # print(type(ms))
@@ -35,7 +35,7 @@ n_wait = np.array([0, 0, 0, 0]).tolist()  # either 0/1 depends on if machine is 
 # print(type(n_wait))
 n_SB = np.array([0, 0, 0, 0]).tolist()  # either 0/1 depends on if machine is starved or blocked
 # print(type(n_SB))
-T = 5
+T = 2000
 t=0
 # mp = np.zeros([n, ptypes])  # part type on each machine
 mp=[[0,0,0],[0,0,0],[0,0,0],[0,0,0]]
